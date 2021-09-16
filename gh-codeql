@@ -1,0 +1,171 @@
+#!/bin/bash
+set -e
+
+if [ "$(gh config get extensions.codeql.debug)" = "true" ] ; then
+    set -x
+fi
+
+error() {
+    echo "ERROR: $*" 1>&2
+    exit 1
+}
+
+rootdir="$(dirname "$0")"
+channel="$(gh config get extensions.codeql.channel)"
+
+if [ -z "$1" ]; then
+    cat <<EOF
+GitHub command-line wrapper for the CodeQL CLI.
+
+Usage:
+    gh codeql set-channel [release|nightly]     # default: release
+    gh codeql set-version [version]             # default: latest
+    gh codeql list-versions                     # list all available versions for current channel
+    gh codeql list-installed                    # list installed versions for current channel
+    gh codeql cleanup <version>                 # delete a specific downloaded version
+    gh codeql cleanup-all                       # delete all installed versions for all channels
+    gh codeql download [version]                # download a specific version (default: latest)
+    gh codeql debug [on|off]                    # enable/disable debug output for gh extension
+    gh codeql <anything else>                   # pass arguments to CodeQL CLI
+
+Current channel: ${channel:-not specified}.
+Current version: ${version:-not specified}.
+EOF
+    exit 0
+fi
+
+if [ -z "$channel" ] || [ "$channel" = "release" ] ; then
+    channel="release"
+    repo=github/codeql-cli-binaries
+elif [ "$channel" = "nightly" ] ; then
+    repo=dsp-testing/codeql-cli-nightlies
+else
+    error "Channel must be 'release' or 'nightly'."
+fi
+
+# determine platform using OSTYPE
+platform="$(gh config get extensions.codeql.platform)"
+if [[ -z "$platform" ]] ; then
+    if [[ "$OSTYPE" == "darwin"* ]] ; then
+        platform=osx64
+    elif [[ "$OSTYPE" == "linux"* ]] ; then
+        platform=linux64
+    elif [[ "$OSTYPE" == "win"* ]] || [[ $OSTYPE == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] ; then
+        platform=win64
+    else
+        error "Couldn't determine platform from OSTYPE='$OSTYPE'. Consider setting extensions.codeql.platform."
+    fi
+fi
+
+# Handle debug command.
+if [ "$1" = "debug" ] ; then
+    if [ "$2" = "on" ] ; then
+        gh config set extensions.codeql.debug true
+    elif [ "$2" = "off" ] ; then
+        gh config set extensions.codeql.debug false
+    else
+        error "Invalid debug command: '$2'."
+    fi
+    exit 0
+fi
+
+# Handle list-versions command.
+if [ "$1" = "list-versions" ]; then
+    gh api "repos/$repo/releases" --paginate --jq ".[].tag_name"
+    exit 0
+fi
+
+# Handle set-channel command.
+if [ "$1" = "set-channel" ]; then
+    if [ "$2" != "release" ] && [ "$2" != "nightly" ]; then
+        error "Invalid channel: '$2'."
+    fi
+    old_channel="$(gh config get extensions.codeql.channel)"
+    if [ "${old_channel:-release}" != "$2" ] ; then
+        gh config set extensions.codeql.channel "$2"
+        gh config set extensions.codeql.version ""
+        echo "Switched to $2 channel. Any pinned version has been unset."
+    else
+        echo "Channel already set to $2."
+    fi
+    exit 0
+fi
+
+function download() {
+    local version="$1"
+    if [ -z "$version" ] || [ "$version" = "latest" ]; then
+        version=$(gh api "repos/$repo/releases/latest" --jq '.tag_name')
+    fi
+    if [ -x "$rootdir/dist/$channel/$version/codeql" ] ; then
+        # Already downloaded.
+        return 0
+    fi
+    id=$(gh api "repos/$repo/releases" --paginate --jq ".[] | select(.tag_name == \"$version\") | .id" | head -n1)
+    if [ -z "$id" ]; then
+        error "Version '$1' not found."
+    fi
+    mkdir -p "$rootdir/dist/$channel"
+    tempdir="$(mktemp -d "$rootdir/dist/$channel/temp_$version.XXXXXXXX")"
+    trap 'rm -rf "$tempdir"' EXIT
+    echo "Downloading CodeQL CLI version $version..."
+    gh release download -R "$repo" "$version" --pattern "codeql-$platform.zip" --dir "$tempdir"
+    echo "Unpacking CodeQL CLI version $version..."
+    unzip -oq "$tempdir/codeql-$platform.zip" -d "$tempdir"
+    mv "$tempdir/codeql" "$rootdir/dist/$channel/$version"
+    rm -rf "$tempdir"
+}
+
+function set_version() {
+    local version="$1"
+    if [ -z "$version" ]; then
+        error "Version must be specified. Use 'latest' to automatically determine the latest version."
+    elif [ "$version" = "latest" ]; then
+        version="$(gh api "repos/$repo/releases/latest" --jq ".tag_name")"
+    fi
+    download "$version"
+    gh config set extensions.codeql.version "$version"
+}
+
+# Handle the download command.
+if [ "$1" = "download" ]; then
+    download "$2"
+    exit 0
+fi    
+
+# Handle the set-version command.
+if [ "$1" = "set-version" ]; then
+    set_version "$2"
+    version="$(gh config get extensions.codeql.version)"
+    exec "$rootdir/dist/$channel/$version/codeql" version
+fi
+
+# Handle the list-installed command.
+if [ "$1" = "list-installed" ]; then
+    ( cd "$rootdir/dist/$channel" ; find . -depth 1 -type d | cut -c3- ; )
+    exit 0
+fi
+
+# Handle the cleanup command.
+if [ "$1" = "cleanup" ]; then
+    if [ -z "$2" ]; then
+        error "Version must be specified."
+    elif [ ! -d "$rootdir/dist/$channel/$2" ]; then
+        error "Version '$2' not found."
+    fi
+    rm -rf "$rootdir/dist/$channel/$2"
+    exit 0
+fi
+
+# Handle the cleanup-all command
+if [ "$1" = "cleanup-all" ]; then
+    rm -rf "$rootdir/dist"
+    exit 0
+fi
+
+version="$(gh config get extensions.codeql.version)"
+if [ -z "$version" ]; then
+    set_version latest
+    version="$(gh config get extensions.codeql.version)"
+fi
+download "$version"
+exec "$rootdir/dist/$channel/$version/codeql" "$@"
