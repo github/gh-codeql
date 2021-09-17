@@ -40,10 +40,21 @@ jobs:
       - name: Check version pinning
         shell: bash
         run: |
+          # Set the version without a v prefix
           gh codeql set-version 2.5.9
           VERSION=`gh codeql version --format json | jq -r '.version'`
           if [[ $VERSION != "2.5.9" ]]; then
             echo "::error::Expected version 2.5.9 but got $VERSION"
+            exit 1
+          fi
+          gh codeql list-installed | grep v2.5.9
+
+          # Set the version with a v prefix
+          COUNT_BEFORE=`gh codeql list-installed | wc -l`
+          gh codeql set-version v2.5.9
+          COUNT_AFTER=`gh codeql list-installed | wc -l`
+          if [[ $COUNT_BEFORE != $COUNT_BEFORE ]]; then
+            echo "::error::Installing an already installed version changed the number of installed versions from $COUNT_BEFORE to $COUNT_AFTER!"
             exit 1
           fi
 
