@@ -96,6 +96,10 @@ function download() {
     if [ -z "$version" ] || [ "$version" = "latest" ]; then
         version=$(gh api "repos/$repo/releases/latest" --jq '.tag_name')
     fi
+    if [ $repo = 'github/codeql-cli-binaries' ] && ! (echo $version | grep '^v' ); then
+        # Versions in github/codeql-cli-binaries have tags prefixed with v, add this in if the user forgot
+        version="v$version"
+    fi
     if [ -x "$rootdir/dist/$channel/$version/codeql" ] ; then
         # Already downloaded.
         return 0
