@@ -145,7 +145,7 @@ fi
 
 # Handle the list-installed command.
 if [ "$1" = "list-installed" ]; then
-    ( cd "$rootdir/dist/$channel" ; find . -maxdepth 1 -type d | cut -c3- ; )
+    ( cd "$rootdir/dist/$channel" ; find . -mindepth 1 -maxdepth 1 -type d | cut -c3- ; )
     exit 0
 fi
 
