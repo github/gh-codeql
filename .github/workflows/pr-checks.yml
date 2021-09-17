@@ -1,0 +1,58 @@
+name: PR Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pr-checks:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: PR Checks
+    runs-on: ${{ matrix.os }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install extension
+        shell: bash
+        run: |
+          gh extensions install .
+
+      - name: Check basic functionality
+        working-directory: test-resources
+        shell: bash
+        run: |
+          gh codeql database create -l cpp -s test-repo -c "gcc -o main main.c" test-db
+          gh codeql pack install test-pack
+          gh codeql database analyze --format=sarif-latest --output=out.sarif test-db test-pack/allExpressions.ql
+          RESULTS=`jq '.runs[0].results | length' out.sarif`
+          if [[ $RESULTS != 1 ]]; then
+            echo "::error::Invalid number of results from test query, expected 1 but got $RESULTS"
+            exit 1
+          fi
+
+      - name: Check version pinning
+        shell: bash
+        run: |
+          gh codeql set-version v2.5.9
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION != "2.5.9" ]]; then
+            echo "::error::Expected version 2.5.9 but got $VERSION"
+            exit 1
+          fi
+
+      - name: Check version unpinning
+        shell: bash
+        run: |
+          gh codeql set-version latest
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION == "2.5.9" ]]; then
+            echo "::error::Expected latest version but got 2.5.9"
+            exit 1
+          fi
