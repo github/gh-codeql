@@ -122,6 +122,10 @@ function set_version() {
     elif [ "$version" = "latest" ]; then
         version="$(gh api "repos/$repo/releases/latest" --jq ".tag_name")"
     fi
+    if [ $repo = 'github/codeql-cli-binaries' ] && ! (echo $version | grep -q '^v' ); then
+        # Versions in github/codeql-cli-binaries have tags prefixed with v, add this in if the user forgot
+        version="v$version"
+    fi
     download "$version"
     gh config set extensions.codeql.version "$version"
 }
