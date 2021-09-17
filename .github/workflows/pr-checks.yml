@@ -56,3 +56,14 @@ jobs:
             echo "::error::Expected latest version but got 2.5.9"
             exit 1
           fi
+
+      - name: Check getting nightly version
+        shell: bash
+        run: |
+          gh codeql set-channel nightly
+          gh codeql set-version codeql-bundle-20210831-manual
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION != "2.6.0+202108311306" ]]; then
+            echo "::error::Expected version 2.6.0+202108311306 but got $VERSION"
+            exit 1
+          fi
