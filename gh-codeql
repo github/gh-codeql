@@ -168,4 +168,5 @@ if [ -z "$version" ]; then
     version="$(gh config get extensions.codeql.version)"
 fi
 download "$version"
+export CODEQL_DIST="$rootdir/dist/$channel/$version"
 exec "$rootdir/dist/$channel/$version/codeql" "$@"
