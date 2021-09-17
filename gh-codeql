@@ -108,7 +108,9 @@ function download() {
     tempdir="$(mktemp -d "$rootdir/dist/$channel/temp_$version.XXXXXXXX")"
     trap 'rm -rf "$tempdir"' EXIT
     echo "Downloading CodeQL CLI version $version..."
-    gh release download -R "$repo" "$version" --pattern "codeql-$platform.zip" --dir "$tempdir"
+    curl -L -o "$tempdir/codeql-$platform.zip" "https://github.com/$repo/releases/download/$version/codeql-$platform.zip"
+    # The below is neater but cannot be made to display a progress bar at the moment:
+    # gh release download -R "$repo" "$version" --pattern "codeql-$platform.zip" --dir "$tempdir"
     echo "Unpacking CodeQL CLI version $version..."
     unzip -oq "$tempdir/codeql-$platform.zip" -d "$tempdir"
     mv "$tempdir/codeql" "$rootdir/dist/$channel/$version"
