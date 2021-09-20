@@ -52,3 +52,5 @@ This extension is newly released and under active development. Contributions are
 ## Licensing
 
 This extension is released by GitHub under the MIT License. For the full text of this, please consult our [LICENSE.md](LICENSE.md) file.
+
+Note that this license applies only to the extension in this repository, for more information on the license governing use of the CodeQL CLI that it uses, please consult the [GitHub CodeQL Terms and Conditions](https://securitylab.github.com/tools/codeql/license/). In particular, note that there are restrictions on how you may use the the CodeQL CLI on code that is not released under an OSI-approved open source software license.
