@@ -24,10 +24,26 @@ jobs:
         run: |
           gh extensions install .
 
+      - name: Check automatically installs latest
+        shell: bash
+        run: |
+          LATEST=`gh release list --repo github/codeql-cli-binaries -L 1 | cut -f 3`
+
+          # Note we need to run a command before trying to parse the output below, or the
+          # messages from the download will end up in the JSON that jq tries to parse
+          gh codeql version 
+          
+          INSTALLED=`gh codeql version --format json | jq -r '.version'`
+          if [[ "v$INSTALLED" != $LATEST ]]; then
+            echo "::error::Expected latest version of $LATEST to be installed, but found v$INSTALLED"
+            exit 1
+          fi
+
       - name: Check basic functionality
         working-directory: test-resources
         shell: bash
         run: |
+          gh codeql set-version 2.6.1
           gh codeql database create -l cpp -s test-repo -c "gcc -o main main.c" test-db
           gh codeql pack install test-pack
           gh codeql database analyze --format=sarif-latest --output=out.sarif test-db test-pack/allExpressions.ql
