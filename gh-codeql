@@ -124,7 +124,7 @@ function set_version() {
         error "Version must be specified. Use 'latest' to automatically determine the latest version."
     elif [ "$version" = "latest" ]; then
         version="$(gh api "repos/$repo/releases/latest" --jq ".tag_name")"
-    elif [ "$repo" = "github/codeql-cli-binaries" ] && [[ "$version" != v* ]] ; then
+    else
         # Versions in github/codeql-cli-binaries have tags prefixed with v, which the user might have omitted.
         # If necessary, we add it in here.
         version="$(gh api graphql -f query='{
@@ -138,7 +138,7 @@ function set_version() {
             }
         }' --jq '[.data.repository.[] | values][0].tagName')"
         if [ -z "$version" ] ; then
-            error "Unknown version: $1."
+            error "Unknown version: '$1'."
         fi
     fi
     download "$version"
