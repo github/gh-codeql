@@ -127,8 +127,10 @@ function set_version() {
     else
         # Versions in github/codeql-cli-binaries have tags prefixed with v, which the user might have omitted.
         # If necessary, we add it in here.
+        repoName=${repo#*/}
+        repoOwner=${repo%/*}
         version="$(gh api graphql -f query='{
-            repository(owner: "github", name: "codeql-cli-binaries") {
+            repository(owner: "'"$repoOwner"'", name: "'"$repoName"'") {
                 asEntered: release(tagName: "'"$version"'") {
                     tagName
                 }
