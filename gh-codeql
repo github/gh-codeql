@@ -12,6 +12,7 @@ error() {
 
 rootdir="$(dirname "$0")"
 channel="$(gh config get extensions.codeql.channel)"
+version="$(gh config get extensions.codeql.version)"
 
 if [ -z "$1" ]; then
     cat <<EOF
@@ -123,10 +124,24 @@ function set_version() {
         error "Version must be specified. Use 'latest' to automatically determine the latest version."
     elif [ "$version" = "latest" ]; then
         version="$(gh api "repos/$repo/releases/latest" --jq ".tag_name")"
-    fi
-    if [ $repo = 'github/codeql-cli-binaries' ] && [[ "$version" != v* ]] ; then
-        # Versions in github/codeql-cli-binaries have tags prefixed with v; we add this in if the user forgot.
-        version="v$version"
+    else
+        # Versions in github/codeql-cli-binaries have tags prefixed with v, which the user might have omitted.
+        # If necessary, we add it in here.
+        repoName=${repo#*/}
+        repoOwner=${repo%/*}
+        version="$(gh api graphql -f query='{
+            repository(owner: "'"$repoOwner"'", name: "'"$repoName"'") {
+                asEntered: release(tagName: "'"$version"'") {
+                    tagName
+                }
+                vPrefixed: release(tagName: "v'"$version"'") {
+                    tagName
+                }
+            }
+        }' --jq '[.data.repository.[] | values][0].tagName')"
+        if [ -z "$version" ] ; then
+            error "Unknown version: '$1'."
+        fi
     fi
     download "$version"
     gh config set extensions.codeql.version "$version"
@@ -168,7 +183,6 @@ if [ "$1" = "cleanup-all" ]; then
     exit 0
 fi
 
-version="$(gh config get extensions.codeql.version)"
 if [ -z "$version" ]; then
     set_version latest
     version="$(gh config get extensions.codeql.version)"
