@@ -95,7 +95,7 @@ fi
 function download() {
     local version="$1"
     if [ -z "$version" ] || [ "$version" = "latest" ]; then
-        version=$(gh api "repos/$repo/releases/latest" --jq '.tag_name')
+        version=$(gh api "repos/$repo/releases" --paginate --jq '.[].tag_name' | sort -V | tail -1)
     fi
     if [ -x "$rootdir/dist/$channel/$version/codeql" ] ; then
         # Already downloaded.
