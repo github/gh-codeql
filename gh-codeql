@@ -92,10 +92,22 @@ if [ "$1" = "set-channel" ]; then
     exit 0
 fi
 
+
+function get_latest() {
+    if [ "$channel" = "release" ]; then
+        # For the release channel, we sort by semantic version order since the tags correspond to release versions.
+        # We ignore draft releases and pre-release versions in this case since we want to give the user a stable version.
+        echo $(gh api "repos/$repo/releases" --paginate --jq ".[] | select(.draft == false and .prerelease == false) | .tag_name" | sort -V | tail -1)
+    else
+        # For the nightly channel, we just take the latest release since the tags there are not semantic versions.
+        echo $(gh api "repos/$repo/releases" --jq ".[].tag_name" | head -1)
+    fi
+}
+
 function download() {
     local version="$1"
     if [ -z "$version" ] || [ "$version" = "latest" ]; then
-        version=$(gh api "repos/$repo/releases" --paginate --jq '.[].tag_name' | sort -V | tail -1)
+        version="$(get_latest)"
     fi
     if [ -x "$rootdir/dist/$channel/$version/codeql" ] ; then
         # Already downloaded.
@@ -123,7 +135,7 @@ function set_version() {
     if [ -z "$version" ]; then
         error "Version must be specified. Use 'latest' to automatically determine the latest version."
     elif [ "$version" = "latest" ]; then
-        version="$(gh api "repos/$repo/releases/latest" --jq ".tag_name")"
+        version="$(get_latest)"
     else
         # Versions in github/codeql-cli-binaries have tags prefixed with v, which the user might have omitted.
         # If necessary, we add it in here.
