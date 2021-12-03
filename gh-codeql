@@ -97,10 +97,10 @@ function get_latest() {
     if [ "$channel" = "release" ]; then
         # For the release channel, we sort by semantic version order since the tags correspond to release versions.
         # We ignore draft releases and pre-release versions in this case since we want to give the user a stable version.
-        echo $(gh api "repos/$repo/releases" --paginate --jq ".[] | select(.draft == false and .prerelease == false) | .tag_name" | sort -V | tail -1)
+        gh api "repos/$repo/releases" --paginate --jq ".[] | select(.draft == false and .prerelease == false) | .tag_name" | sort -V | tail -1
     else
         # For the nightly channel, we just take the latest release since the tags there are not semantic versions.
-        echo $(gh api "repos/$repo/releases" --jq ".[].tag_name" | head -1)
+        gh api "repos/$repo/releases" --jq ". | first | .tag_name"
     fi
 }
 
