@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-if [ "$(gh config get extensions.codeql.debug)" = "true" ] ; then
+debug="$(gh config get extensions.codeql.debug 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
+if [ "$debug" = "true" ] ; then
     set -x
 fi
 
@@ -11,8 +12,8 @@ error() {
 }
 
 rootdir="$(dirname "$0")"
-channel="$(gh config get extensions.codeql.channel)"
-version="$(gh config get extensions.codeql.version)"
+channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
+version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 
 if [ -z "$1" ]; then
     cat <<EOF
@@ -45,7 +46,7 @@ else
 fi
 
 # determine platform using OSTYPE
-platform="$(gh config get extensions.codeql.platform)"
+platform="$(gh config get extensions.codeql.platform 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 if [[ -z "$platform" ]] ; then
     if [[ "$OSTYPE" == "darwin"* ]] ; then
         platform=osx64
@@ -61,9 +62,9 @@ fi
 # Handle debug command.
 if [ "$1" = "debug" ] ; then
     if [ "$2" = "on" ] ; then
-        gh config set extensions.codeql.debug true
+        gh config set extensions.codeql.debug true 2> /dev/null # Ignore a warning about unrecognized custom keys
     elif [ "$2" = "off" ] ; then
-        gh config set extensions.codeql.debug false
+        gh config set extensions.codeql.debug false 2> /dev/null # Ignore a warning about unrecognized custom keys
     else
         error "Invalid debug command: '$2'."
     fi
@@ -81,10 +82,10 @@ if [ "$1" = "set-channel" ]; then
     if [ "$2" != "release" ] && [ "$2" != "nightly" ]; then
         error "Invalid channel: '$2'."
     fi
-    old_channel="$(gh config get extensions.codeql.channel)"
+    old_channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
     if [ "${old_channel:-release}" != "$2" ] ; then
-        gh config set extensions.codeql.channel "$2"
-        gh config set extensions.codeql.version ""
+        gh config set extensions.codeql.channel "$2" 2> /dev/null # Ignore a warning about unrecognized custom keys
+        gh config set extensions.codeql.version "" 2> /dev/null # Ignore a warning about unrecognized custom keys
         echo "Switched to $2 channel. Any pinned version has been unset."
     else
         echo "Channel already set to $2."
@@ -99,8 +100,8 @@ function get_latest() {
         # We ignore draft releases and pre-release versions in this case since we want to give the user a stable version.
         gh api "repos/$repo/releases" --paginate --jq ".[] | select(.draft == false and .prerelease == false) | .tag_name" | sort -V | tail -1
     else
-        # For the nightly channel, we just take the latest release since the tags there are not semantic versions.
-        gh api "repos/$repo/releases" --jq ". | first | .tag_name"
+        # For the nightly channel, we just take the latest non-draft release since the tags there are not semantic versions.
+        gh api "repos/$repo/releases" --jq ".[] | select(.draft == false) | .tag_name" | head -1
     fi
 }
 
@@ -156,7 +157,7 @@ function set_version() {
         fi
     fi
     download "$version"
-    gh config set extensions.codeql.version "$version"
+    gh config set extensions.codeql.version "$version" 2> /dev/null # Ignore a warning about unrecognized custom keys
 }
 
 # Handle the download command.
@@ -168,7 +169,7 @@ fi
 # Handle the set-version command.
 if [ "$1" = "set-version" ]; then
     set_version "$2"
-    version="$(gh config get extensions.codeql.version)"
+    version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
     exec "$rootdir/dist/$channel/$version/codeql" version
 fi
 
@@ -197,7 +198,7 @@ fi
 
 if [ -z "$version" ]; then
     set_version latest
-    version="$(gh config get extensions.codeql.version)"
+    version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 fi
 download "$version"
 export CODEQL_DIST="$rootdir/dist/$channel/$version"
