@@ -19,6 +19,9 @@ if [ -e .codeql-version ]; then
     version=$(<.codeql-version)
 fi
 
+# The environment variable GH_CODEQL_VERSION overrides all specified versions.
+version=${GH_CODEQL_VERSION:-$version}
+
 if [ -z "$1" ]; then
     cat <<EOF
 GitHub command-line wrapper for the CodeQL CLI.
