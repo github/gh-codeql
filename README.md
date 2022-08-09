@@ -48,6 +48,10 @@ You can download additional versions without pinning them (perhaps to prepare fo
 
 To upgrade, run `gh codeql set-version latest`, which will pin you to the current latest version.
 
+### CodeQL stub
+
+If you want to use the GitHub CLI managed CodeQL version directly in a terminal or use it with the Visual Studio Code CodeQL extension then you can install a stub using the command `gh codeql install-stub` that will install a Bash script called `codeql` that invokes the GitHub CLI. The default install directory is `/usr/local/bin/`, but you can change this by passing an existing directory.
+
 ## Development
 
 This extension is newly released and under active development. Contributions are very welcome, for more information about how you can contribute, please check our [CONTRIBUTING.md](CONTRIBUTING.md) file. For a list of outstanding issues, please take a look at [our backlog](https://github.com/github/gh-codeql/issues). If you encounter a problem that does not already have an open issue associated with it, please open one there.
