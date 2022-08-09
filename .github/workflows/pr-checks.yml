@@ -32,7 +32,7 @@ jobs:
           # Note we need to run a command before trying to parse the output below, or the
           # messages from the download will end up in the JSON that jq tries to parse
           gh codeql version 
-          
+
           INSTALLED=`gh codeql version --format json | jq -r '.version'`
           if [[ "v$INSTALLED" != $LATEST ]]; then
             echo "::error::Expected latest version of $LATEST to be installed, but found v$INSTALLED"
@@ -81,6 +81,47 @@ jobs:
           VERSION=`gh codeql version --format json | jq -r '.version'`
           if [[ $VERSION == "2.5.9" ]]; then
             echo "::error::Expected latest version but got 2.5.9"
+            exit 1
+          fi
+
+      - name: Check local version pinning
+        shell: bash
+        run: |
+          gh codeql set-version latest
+          # Get the latest installed version
+          LATEST=`gh codeql version --format json | jq -r '.version'`
+          # Set a local version
+          gh codeql set-local-version 2.5.9
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION != "2.5.9" ]]; then
+            echo "::error::Expected version 2.5.9 but got $VERSION"
+            exit 1
+          fi
+
+          # Create a temp directory so we can  change the working directory
+          mkdir temp
+          pushd temp
+          OTHER_VERSION=`gh codeql version --format json | jq -r '.version'`
+
+           if [[ $OTHER_VERSION != $LATEST ]]; then
+            echo "::error::Expected version $LATEST but got $OTHER_VERSION"
+            exit 1
+          fi
+          popd
+          rmdir temp
+
+      - name: Check local version unpinning
+        shell: bash
+        run: |
+          gh codeql set-version latest
+          # Get the latest installed version
+          LATEST=`gh codeql version --format json | jq -r '.version'`
+          # Set a local version
+          gh codeql set-local-version 2.5.9
+          # Unset the local version
+          gh codeql unset-local-version
+          if [[ $VERSION == "2.5.9" ]]; then
+            echo "::error::Expected $LATEST version but got 2.5.9"
             exit 1
           fi
 

@@ -15,6 +15,10 @@ rootdir="$(dirname "$0")"
 channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 
+if [ -e .codeql-version ]; then
+    version=$(<.codeql-version)
+fi
+
 if [ -z "$1" ]; then
     cat <<EOF
 GitHub command-line wrapper for the CodeQL CLI.
@@ -22,6 +26,8 @@ GitHub command-line wrapper for the CodeQL CLI.
 Usage:
     gh codeql set-channel [release|nightly]     # default: release
     gh codeql set-version [version]             # default: latest
+    gh codeql set-local-version [version]       # set the version for the current working directory, default: latest
+    gh codeql unset-local-version               # switch back to the global version
     gh codeql list-versions                     # list all available versions for current channel
     gh codeql list-installed                    # list installed versions for current channel
     gh codeql cleanup <version>                 # delete a specific downloaded version
@@ -131,7 +137,7 @@ function download() {
     rm -rf "$tempdir"
 }
 
-function set_version() {
+function validate_version() {
     local version="$1"
     if [ -z "$version" ]; then
         error "Version must be specified. Use 'latest' to automatically determine the latest version."
@@ -156,8 +162,19 @@ function set_version() {
             error "Unknown version: '$1'."
         fi
     fi
+    echo "$version"
+}
+
+function set_version() {
+    local version=$(validate_version "$1")
     download "$version"
     gh config set extensions.codeql.version "$version" 2> /dev/null # Ignore a warning about unrecognized custom keys
+}
+
+function set_local_version() {
+    local version=$(validate_version "$1")
+    download "$version"
+    echo "$version" > .codeql-version
 }
 
 # Handle the download command.
@@ -171,6 +188,19 @@ if [ "$1" = "set-version" ]; then
     set_version "$2"
     version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
     exec "$rootdir/dist/$channel/$version/codeql" version
+fi
+
+# Handle the set-local-version command
+if [ "$1" = "set-local-version" ]; then
+    set_local_version "$2"
+    version="$(<.codeql-version)" || : # Supress an error and return emtpy if the file doesn't exist
+    exec "$rootdir/dist/$channel/$version/codeql" version
+fi
+
+# Handle the unset-local-version command
+if [ "$1" = "unset-local-version" ]; then
+    rm -f .codeql-version
+    exit 0
 fi
 
 # Handle the list-installed command.
