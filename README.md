@@ -15,12 +15,15 @@ GitHub command-line wrapper for the CodeQL CLI.
 Usage:
     gh codeql set-channel [release|nightly]     # default: release
     gh codeql set-version [version]             # default: latest
+    gh codeql set-local-version [version]       # set the version for the current working directory, default: latest
+    gh codeql unset-local-version               # switch back to the global version
     gh codeql list-versions                     # list all available versions for current channel
     gh codeql list-installed                    # list installed versions for current channel
     gh codeql cleanup <version>                 # delete a specific downloaded version
     gh codeql cleanup-all                       # delete all installed versions for all channels
     gh codeql download [version]                # download a specific version (default: latest)
     gh codeql debug [on|off]                    # enable/disable debug output for gh extension
+    gh codeql install-stub [dir]                # default: /usr/local/bin/
     gh codeql <anything else>                   # pass arguments to CodeQL CLI
 
 Current channel: release.
