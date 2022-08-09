@@ -139,6 +139,7 @@ jobs:
       - name: Check use of stub
         shell: bash
         run: |
+          gh codeql set-version latest
           VERSION=`gh codeql version --format json | jq -r '.version'`
 
           mkdir temp
