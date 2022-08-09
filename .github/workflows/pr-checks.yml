@@ -135,6 +135,7 @@ jobs:
             echo "::error::Expected version 2.6.0+202108311306 but got $VERSION"
             exit 1
           fi
+          gh codeql set-channel release
 
       - name: Check version override
         shell: bash
