@@ -42,7 +42,7 @@ You can list the installed versions from the current channel with `gh codeql lis
 
 ### Versions
 
-The `gh codeql` command always works relative to a pinned version on the current channel. You can manually specify the pinned version using `gh codeql set-version`.
+The `gh codeql` command always works relative to a pinned version on the current channel. You can manually specify the pinned version using `gh codeql set-version`. To pin a version to a working directory you can use the command `gh codeql set-local-version` and `gh codeql` will always use that version when running in that working directory. To remove a pin from a working directory run `gh codeql unset-local-version` in that working directory.
 
 You can download additional versions without pinning them (perhaps to prepare for local comparisons) using `gh codeql download`.
 
