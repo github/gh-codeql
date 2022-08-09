@@ -103,7 +103,7 @@ jobs:
           pushd temp
           OTHER_VERSION=`gh codeql version --format json | jq -r '.version'`
 
-           if [[ $OTHER_VERSION != $LATEST ]]; then
+          if [[ $OTHER_VERSION != $LATEST ]]; then
             echo "::error::Expected version $LATEST but got $OTHER_VERSION"
             exit 1
           fi
