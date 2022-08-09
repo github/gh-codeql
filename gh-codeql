@@ -34,6 +34,7 @@ Usage:
     gh codeql cleanup-all                       # delete all installed versions for all channels
     gh codeql download [version]                # download a specific version (default: latest)
     gh codeql debug [on|off]                    # enable/disable debug output for gh extension
+    gh codeql install-stub [dir]                # default: /usr/local/bin/
     gh codeql <anything else>                   # pass arguments to CodeQL CLI
 
 Current channel: ${channel:-not specified}.
@@ -177,6 +178,26 @@ function set_local_version() {
     echo "$version" > .codeql-version
 }
 
+function install_stub() {
+    local bindir="$1"
+    if [ -z "$bindir" ]; then
+        bindir="/usr/local/bin"
+    fi
+
+    if [ ! -e "$bindir" ]; then
+        error "The directory $bindir doesn't exist, cannot install stub!"
+    fi
+
+    cat << "_codeql_stub" > "$bindir/codeql"
+#!/usr/bin/env bash
+
+set -e
+exec -a codeql gh codeql "$@"
+_codeql_stub
+
+    chmod +x "$bindir/codeql"
+}
+
 # Handle the download command.
 if [ "$1" = "download" ]; then
     download "$2"
@@ -223,6 +244,12 @@ fi
 # Handle the cleanup-all command
 if [ "$1" = "cleanup-all" ]; then
     rm -rf "$rootdir/dist"
+    exit 0
+fi
+
+# Hanlde the install-stub command
+if [ "$1" = "install-stub" ]; then
+    install_stub "$2"
     exit 0
 fi
 
