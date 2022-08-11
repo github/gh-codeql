@@ -109,6 +109,7 @@ jobs:
           fi
           popd
           rmdir temp
+          gh codeql unset-local-version
 
       - name: Check local version unpinning
         shell: bash
@@ -148,6 +149,7 @@ jobs:
             echo "::error::Expected version 2.7.6 but got $VERSION"
             exit 1
           fi
+          gh codeql unset-local-version
 
       - name: Check getting nightly version
         shell: bash
