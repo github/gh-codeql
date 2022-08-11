@@ -217,7 +217,7 @@ fi
 # Handle the set-local-version command
 if [ "$1" = "set-local-version" ]; then
     set_local_version "$2"
-    version="$(<.codeql-version)" || : # Supress an error and return emtpy if the file doesn't exist
+    version="$(<.codeql-version)" || : # Supress an error and return empty if the file doesn't exist
     exec "$rootdir/dist/$channel/$version/codeql" version
 fi
 
