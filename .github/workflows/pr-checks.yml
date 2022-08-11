@@ -125,6 +125,30 @@ jobs:
             exit 1
           fi
 
+      - name: Check local version pinning modification
+        shell: bash
+        run: |
+          gh codeql set-version latest
+          # Get the latest installed version
+          LATEST=`gh codeql version --format json | jq -r '.version'`
+          # Set a local version
+          gh codeql set-local-version 2.5.9
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION != "2.5.9" ]]; then
+            echo "::error::Expected version 2.5.9 but got $VERSION"
+            exit 1
+          fi
+
+          # Modify the pinned version without using the CLI
+          echo v2.7.6 > .codeql-version
+          # We run the command twice to prevent cURL output from causing a `jq` parser error.
+          gh codeql version
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION != "2.7.6" ]]; then
+            echo "::error::Expected version 2.7.6 but got $VERSION"
+            exit 1
+          fi
+
       - name: Check getting nightly version
         shell: bash
         run: |
