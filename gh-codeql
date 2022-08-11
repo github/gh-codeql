@@ -37,7 +37,7 @@ Usage:
     gh codeql cleanup-all                       # delete all installed versions for all channels
     gh codeql download [version]                # download a specific version (default: latest)
     gh codeql debug [on|off]                    # enable/disable debug output for gh extension
-    gh codeql install-stub [dir]                # default: /usr/local/bin/
+    gh codeql install-stub [dir]                # install an executable script named 'codeql' that invokes 'gh codeql' with the passed arguments (default: /usr/local/bin/)
     gh codeql <anything else>                   # pass arguments to CodeQL CLI
 
 Current channel: ${channel:-not specified}.
