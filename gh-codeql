@@ -250,7 +250,7 @@ if [ "$1" = "cleanup-all" ]; then
     exit 0
 fi
 
-# Hanlde the install-stub command
+# Handle the install-stub command
 if [ "$1" = "install-stub" ]; then
     install_stub "$2"
     exit 0
