@@ -141,6 +141,10 @@ jobs:
         shell: bash
         run: |
           gh codeql set-version latest
+          # We run the command with a version override twice such that first run will download the CodeQL CLI
+          # and the cURL output doesn't confuse the `jq` parser in the second run.
+          # This implicit download is to test that we properly support the implicit download of a requested version if it is not present.
+          GH_CODEQL_VERSION=v2.7.6 gh codeql version
           VERSION=`GH_CODEQL_VERSION=v2.7.6 gh codeql version --format json | jq -r '.version'`
 
           if [[ $VERSION != "2.7.6" ]]; then
