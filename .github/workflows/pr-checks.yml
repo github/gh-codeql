@@ -141,7 +141,6 @@ jobs:
         shell: bash
         run: |
           gh codeql set-version latest
-          gh codeql download v2.7.6
           VERSION=`GH_CODEQL_VERSION=v2.7.6 gh codeql version --format json | jq -r '.version'`
 
           if [[ $VERSION != "2.7.6" ]]; then
