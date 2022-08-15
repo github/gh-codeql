@@ -188,7 +188,7 @@ function install_stub() {
     fi
 
     if [ ! -e "$bindir" ]; then
-        error "The directory $bindir doesn't exist, cannot install stub!"
+        error "The directory $bindir doesn't exist, please provide a different directory like 'gh codeql install-stub [dir]' to install a stub."
     fi
 
     cat << "_codeql_stub" > "$bindir/codeql"
