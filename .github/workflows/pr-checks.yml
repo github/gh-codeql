@@ -87,6 +87,8 @@ jobs:
       - name: Check local version pinning
         shell: bash
         run: |
+          # Enable local pinning
+          gh config set extensions.codeql.local-pinning true 2> /dev/null
           gh codeql set-version latest
           # Get the latest installed version
           LATEST=`gh codeql version --format json | jq -r '.version'`
@@ -110,10 +112,14 @@ jobs:
           popd
           rmdir temp
           gh codeql unset-local-version
+          # Disable local pinning
+          gh config set extensions.codeql.local-pinning false 2> /dev/null
 
       - name: Check local version unpinning
         shell: bash
         run: |
+          # Enable local pinning
+          gh config set extensions.codeql.local-pinning true 2> /dev/null
           gh codeql set-version latest
           # Get the latest installed version
           LATEST=`gh codeql version --format json | jq -r '.version'`
@@ -125,10 +131,14 @@ jobs:
             echo "::error::Expected $LATEST version but got 2.5.9"
             exit 1
           fi
+          # Disable local pinning
+          gh config set extensions.codeql.local-pinning false 2> /dev/null
 
       - name: Check local version pinning modification
         shell: bash
         run: |
+          # Enable local pinning
+          gh config set extensions.codeql.local-pinning true 2> /dev/null
           gh codeql set-version latest
           # Get the latest installed version
           LATEST=`gh codeql version --format json | jq -r '.version'`
@@ -150,6 +160,25 @@ jobs:
             exit 1
           fi
           gh codeql unset-local-version
+          # Disable local pinning
+          gh config set extensions.codeql.local-pinning false 2> /dev/null
+
+      - name: Check local version pinning is disbled by default
+        shell: bash
+        run: |
+          gh codeql set-version latest
+          # Get the latest installed version
+          LATEST=`gh codeql version --format json | jq -r '.version'`
+
+          # Modify the pinned version without using the CLI
+          echo v2.7.6 > .codeql-version
+          # We run the command twice to prevent cURL output from causing a `jq` parser error.
+          gh codeql version
+          VERSION=`gh codeql version --format json | jq -r '.version'`
+          if [[ $VERSION = "2.7.6" ]]; then
+            echo "::error::Expected version $LATEST but got $VERSION"
+            exit 1
+          fi
 
       - name: Check getting nightly version
         shell: bash

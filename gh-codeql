@@ -14,8 +14,9 @@ error() {
 rootdir="$(dirname "$0")"
 channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
+local_pinning="$(gh config get extensions.codeql.local-pinning 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 
-if [ -e .codeql-version ]; then
+if [ "$local_pinning" = "true" -a -e .codeql-version ]; then
     version=$(<.codeql-version)
 fi
 
@@ -171,6 +172,9 @@ function validate_version() {
 
 function set_version() {
     local version=$(validate_version "$1")
+    if [ -z "$version" ]; then
+        exit 1
+    fi
     download "$version"
     gh config set extensions.codeql.version "$version" 2> /dev/null # Ignore a warning about unrecognized custom keys
 }
@@ -221,9 +225,25 @@ fi
 
 # Handle the set-local-version command
 if [ "$1" = "set-local-version" ]; then
-    set_local_version "$2"
-    version="$(<.codeql-version)" || : # Supress an error and return empty if the file doesn't exist
-    exec "$rootdir/dist/$channel/$version/codeql" version
+    if [ "$local_pinning" = "true" ]; then
+        set_local_version "$2"
+        version="$(<.codeql-version)" || : # Supress an error and return empty if the file doesn't exist
+        exec "$rootdir/dist/$channel/$version/codeql" version
+    else
+        cat << _message
+The 'set-local-version' command is disabled by default to remove the opportunity from untrusted git repositories to
+abuse older CodeQL CLIs.
+_message
+        read -p "Type 'yes' to enable per directory pinning or anything else to cancel:" choice
+        if [ "$choice" = "yes" ]; then
+            gh config set extensions.codeql.local-pinning true 2> /dev/null
+            echo "Enabled per directory pinning, re-run the command to set the local version."
+            exit
+        else
+            echo "Per directory pinning remains disabled. Re-run the command if you want to enabled it."
+            exit
+        fi
+    fi
 fi
 
 # Handle the unset-local-version command
