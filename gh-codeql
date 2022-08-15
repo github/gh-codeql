@@ -191,14 +191,19 @@ function install_stub() {
         error "The directory $bindir doesn't exist, please provide a different directory like 'gh codeql install-stub [dir]' to install a stub."
     fi
 
-    cat << "_codeql_stub" > "$bindir/codeql"
+    if [ -w "$bindir" ]; then
+
+        cat << "_codeql_stub" > "$bindir/codeql"
 #!/usr/bin/env bash
 
 set -e
 exec -a codeql gh codeql "$@"
 _codeql_stub
 
-    chmod +x "$bindir/codeql"
+        chmod +x "$bindir/codeql"
+    else
+        error "Missing write permission on $bindir. Please provide a directory with write permissions to install a stub."
+    fi
 }
 
 # Handle the download command.
