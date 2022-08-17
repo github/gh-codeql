@@ -11,13 +11,36 @@ error() {
     exit 1
 }
 
+warning() {
+    echo "WARNING: $*" 1>&2
+}
+
 rootdir="$(dirname "$0")"
 channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
-local_pinning="$(gh config get extensions.codeql.local-pinning 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 
-if [ "$local_pinning" = "true" -a -e .codeql-version ]; then
-    version=$(<.codeql-version)
+# Handle local-version command first to prevent local version warning when enabling local version support if a local version is specified..
+if [ "$1" = "local-version" ] ; then
+    if [ "$2" = "on" ] ; then
+        warning "Local version support is disabled by default to remove the opportunity from untrusted git repositories to
+abuse older CodeQL CLIs. To disable local version support again run the command 'gh codeql local-version off'."
+        gh config set extensions.codeql.local-version true 2> /dev/null # Ignore a warning about unrecognized custom keys
+    elif [ "$2" = "off" ] ; then
+        gh config set extensions.codeql.local-version false 2> /dev/null # Ignore a warning about unrecognized custom keys
+    else
+        error "Invalid local-version command: '$2'."
+    fi
+    exit 0
+fi
+
+local_version="$(gh config get extensions.codeql.local-version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
+
+if [ -e .codeql-version ]; then
+    if [ "$local_version" = "true" ]; then
+        version=$(<.codeql-version)
+    else
+        warning "Ignoring local version because local version support is off. Call the command 'gh codeql local-version on' to enable local version support. "
+    fi
 fi
 
 # The environment variable GH_CODEQL_VERSION overrides all specified versions.
@@ -30,6 +53,7 @@ GitHub command-line wrapper for the CodeQL CLI.
 Usage:
     gh codeql set-channel [release|nightly]     # default: release
     gh codeql set-version [version]             # default: latest
+    gh codeql local-version [on|off]            # enable/disable local version support
     gh codeql set-local-version [version]       # set the version for the current working directory, default: latest
     gh codeql unset-local-version               # switch back to the global version
     gh codeql list-versions                     # list all available versions for current channel
@@ -225,30 +249,26 @@ fi
 
 # Handle the set-local-version command
 if [ "$1" = "set-local-version" ]; then
-    if [ "$local_pinning" = "true" ]; then
+    if [ "$local_version" = "true" ]; then
         set_local_version "$2"
         version="$(<.codeql-version)" || : # Supress an error and return empty if the file doesn't exist
         exec "$rootdir/dist/$channel/$version/codeql" version
     else
-        cat << _message
-The 'set-local-version' command is disabled by default to remove the opportunity from untrusted git repositories to
-abuse older CodeQL CLIs.
+        error "$(cat << _message
+Local version support is disabled by default to remove the opportunity from untrusted git repositories to
+abuse older CodeQL CLIs. Enable local version support with the command 'gh codeql local-version on'.
 _message
-        read -p "Type 'yes' to enable per directory pinning or anything else to cancel:" choice
-        if [ "$choice" = "yes" ]; then
-            gh config set extensions.codeql.local-pinning true 2> /dev/null
-            echo "Enabled per directory pinning, re-run the command to set the local version."
-            exit
-        else
-            echo "Per directory pinning remains disabled. Re-run the command if you want to enabled it."
-            exit
-        fi
+)"
     fi
 fi
 
 # Handle the unset-local-version command
 if [ "$1" = "unset-local-version" ]; then
-    rm -f .codeql-version
+    if [ -e .codeql-version ]; then
+        rm -f .codeql-version
+    else
+        warning "No local version specified."
+    fi
     exit 0
 fi
 
