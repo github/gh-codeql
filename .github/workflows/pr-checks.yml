@@ -163,7 +163,7 @@ jobs:
           # Disable local version support
           gh codeql local-version off
 
-      - name: Check local version pinning is disbled by default
+      - name: Check local version pinning is disabled by default
         shell: bash
         run: |
           gh codeql set-version latest
