@@ -28,7 +28,7 @@ abuse older CodeQL CLIs. To disable local version support again run the command 
     elif [ "$2" = "off" ] ; then
         gh config set extensions.codeql.local-version false 2> /dev/null # Ignore a warning about unrecognized custom keys
     else
-        error "Invalid local-version command: '$2'."
+        error "Invalid local-version command: '$2'. Supported values are 'on' or 'off'."
     fi
     exit 0
 fi
