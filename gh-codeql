@@ -11,9 +11,40 @@ error() {
     exit 1
 }
 
+warning() {
+    echo "WARNING: $*" 1>&2
+}
+
 rootdir="$(dirname "$0")"
 channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
 version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
+
+# Handle local-version command first to prevent local version warning when enabling local version support if a local version is specified..
+if [ "$1" = "local-version" ] ; then
+    if [ "$2" = "on" ] ; then
+        warning "Local version support is disabled by default to remove the opportunity from untrusted git repositories to
+abuse older CodeQL CLIs. To disable local version support again run the command 'gh codeql local-version off'."
+        gh config set extensions.codeql.local-version true 2> /dev/null # Ignore a warning about unrecognized custom keys
+    elif [ "$2" = "off" ] ; then
+        gh config set extensions.codeql.local-version false 2> /dev/null # Ignore a warning about unrecognized custom keys
+    else
+        error "Invalid local-version command: '$2'. Supported values are 'on' or 'off'."
+    fi
+    exit 0
+fi
+
+local_version="$(gh config get extensions.codeql.local-version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
+
+if [ -e .codeql-version ]; then
+    if [ "$local_version" = "true" ]; then
+        version=$(<.codeql-version)
+    else
+        warning "Ignoring local version because local version support is off. Call the command 'gh codeql local-version on' to enable local version support. "
+    fi
+fi
+
+# The environment variable GH_CODEQL_VERSION overrides all specified versions.
+version=${GH_CODEQL_VERSION:-$version}
 
 if [ -z "$1" ]; then
     cat <<EOF
@@ -22,12 +53,16 @@ GitHub command-line wrapper for the CodeQL CLI.
 Usage:
     gh codeql set-channel [release|nightly]     # default: release
     gh codeql set-version [version]             # default: latest
+    gh codeql local-version [on|off]            # enable/disable local version support
+    gh codeql set-local-version [version]       # set the version for the current working directory, default: latest
+    gh codeql unset-local-version               # switch back to the global version
     gh codeql list-versions                     # list all available versions for current channel
     gh codeql list-installed                    # list installed versions for current channel
     gh codeql cleanup <version>                 # delete a specific downloaded version
     gh codeql cleanup-all                       # delete all installed versions for all channels
     gh codeql download [version]                # download a specific version (default: latest)
     gh codeql debug [on|off]                    # enable/disable debug output for gh extension
+    gh codeql install-stub [dir]                # install an executable script named 'codeql' that invokes 'gh codeql' with the passed arguments (default: /usr/local/bin/)
     gh codeql <anything else>                   # pass arguments to CodeQL CLI
 
 Current channel: ${channel:-not specified}.
@@ -131,7 +166,7 @@ function download() {
     rm -rf "$tempdir"
 }
 
-function set_version() {
+function validate_version() {
     local version="$1"
     if [ -z "$version" ]; then
         error "Version must be specified. Use 'latest' to automatically determine the latest version."
@@ -156,8 +191,47 @@ function set_version() {
             error "Unknown version: '$1'."
         fi
     fi
+    echo "$version"
+}
+
+function set_version() {
+    local version=$(validate_version "$1")
+    if [ -z "$version" ]; then
+        exit 1
+    fi
     download "$version"
     gh config set extensions.codeql.version "$version" 2> /dev/null # Ignore a warning about unrecognized custom keys
+}
+
+function set_local_version() {
+    local version=$(validate_version "$1")
+    download "$version"
+    echo "$version" > .codeql-version
+}
+
+function install_stub() {
+    local bindir="$1"
+    if [ -z "$bindir" ]; then
+        bindir="/usr/local/bin"
+    fi
+
+    if [ ! -e "$bindir" ]; then
+        error "The directory $bindir doesn't exist, please provide a different directory like 'gh codeql install-stub [dir]' to install a stub."
+    fi
+
+    if [ -w "$bindir" ]; then
+
+        cat << "_codeql_stub" > "$bindir/codeql"
+#!/usr/bin/env bash
+
+set -e
+exec -a codeql gh codeql "$@"
+_codeql_stub
+
+        chmod +x "$bindir/codeql"
+    else
+        error "Missing write permission on $bindir. Please provide a directory with write permissions to install a stub."
+    fi
 }
 
 # Handle the download command.
@@ -171,6 +245,31 @@ if [ "$1" = "set-version" ]; then
     set_version "$2"
     version="$(gh config get extensions.codeql.version 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist
     exec "$rootdir/dist/$channel/$version/codeql" version
+fi
+
+# Handle the set-local-version command
+if [ "$1" = "set-local-version" ]; then
+    if [ "$local_version" = "true" ]; then
+        set_local_version "$2"
+        version="$(<.codeql-version)" || : # Supress an error and return empty if the file doesn't exist
+        exec "$rootdir/dist/$channel/$version/codeql" version
+    else
+        error "$(cat << _message
+Local version support is disabled by default to remove the opportunity from untrusted git repositories to
+abuse older CodeQL CLIs. Enable local version support with the command 'gh codeql local-version on'.
+_message
+)"
+    fi
+fi
+
+# Handle the unset-local-version command
+if [ "$1" = "unset-local-version" ]; then
+    if [ -e .codeql-version ]; then
+        rm -f .codeql-version
+    else
+        warning "No local version specified."
+    fi
+    exit 0
 fi
 
 # Handle the list-installed command.
@@ -193,6 +292,12 @@ fi
 # Handle the cleanup-all command
 if [ "$1" = "cleanup-all" ]; then
     rm -rf "$rootdir/dist"
+    exit 0
+fi
+
+# Handle the install-stub command
+if [ "$1" = "install-stub" ]; then
+    install_stub "$2"
     exit 0
 fi
 

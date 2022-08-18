@@ -15,12 +15,15 @@ GitHub command-line wrapper for the CodeQL CLI.
 Usage:
     gh codeql set-channel [release|nightly]     # default: release
     gh codeql set-version [version]             # default: latest
+    gh codeql set-local-version [version]       # set the version for the current working directory, default: latest
+    gh codeql unset-local-version               # switch back to the global version
     gh codeql list-versions                     # list all available versions for current channel
     gh codeql list-installed                    # list installed versions for current channel
     gh codeql cleanup <version>                 # delete a specific downloaded version
     gh codeql cleanup-all                       # delete all installed versions for all channels
     gh codeql download [version]                # download a specific version (default: latest)
     gh codeql debug [on|off]                    # enable/disable debug output for gh extension
+    gh codeql install-stub [dir]                # default: /usr/local/bin/
     gh codeql <anything else>                   # pass arguments to CodeQL CLI
 
 Current channel: release.
@@ -39,11 +42,15 @@ You can list the installed versions from the current channel with `gh codeql lis
 
 ### Versions
 
-The `gh codeql` command always works relative to a pinned version on the current channel. You can manually specify the pinned version using `gh codeql set-version`.
+The `gh codeql` command always works relative to a pinned version on the current channel. You can manually specify the pinned version using `gh codeql set-version`. To pin a version to a working directory you can use the command `gh codeql set-local-version` and `gh codeql` will always use that version when running in that working directory. To remove a pin from a working directory run `gh codeql unset-local-version` in that working directory.
 
 You can download additional versions without pinning them (perhaps to prepare for local comparisons) using `gh codeql download`.
 
 To upgrade, run `gh codeql set-version latest`, which will pin you to the current latest version.
+
+### CodeQL stub
+
+If you want to use the GitHub CLI managed CodeQL version directly in a terminal or use it with the Visual Studio Code CodeQL extension then you can install a stub using the command `gh codeql install-stub` that will install a Bash script called `codeql` that invokes the GitHub CLI. The default install directory is `/usr/local/bin/`, but you can change this by passing an existing directory.
 
 ## Development
 
