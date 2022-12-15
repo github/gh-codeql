@@ -1,4 +1,4 @@
 name: test-cpp-querypack
 version: 0.0.1
 dependencies:
-  codeql/cpp-all: "0.0.2"
+  codeql/cpp-all: "*"
