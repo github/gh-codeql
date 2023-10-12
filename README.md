@@ -32,6 +32,10 @@ Current version: not specified.
 
 You should be able to prefix any `codeql` command you run with `gh` to automatically download the selected version (by default: the latest release version at the time you first run it) and delegate to it.
 
+### Support
+
+This extension is owned by the CodeQL team. If you have any problems or feature requests, please raise them in the [CodeQL repository](https://github.com/github/codeql).
+
 ### Channels
 
 There are two channels: "release" and "nightly". You are on the release channel by default, and switching channels unpins the selected version (meaning that, unless you run `gh codeql set-version`, the latest version of the current channel will be selected the next time you run a command).
