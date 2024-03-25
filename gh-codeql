@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 debug="$(gh config get extensions.codeql.debug 2> /dev/null)" || : # Suppress an error and return empty if the field doesn't exist

@@ -204,10 +204,10 @@ jobs:
 
           # unfortunately for nightly builds the tag name does not match with the version name
           # (as it does for releases). So, we need to download by tag name and then check the version name.
-          LATEST_NIGHTLY_TAG="$(gh api "repos/dsp-testing/codeql-cli-nightlies/releases" --jq ".[] | select(.draft == false) | .tag_name" | head -1)"
+          LATEST_NIGHTLY_TAG="$(gh api "repos/dsp-testing/codeql-cli-nightlies/releases" --jq ".[] | select(.draft == false) | .tag_name" | sed '1!d')"
 
           # slightly hacky way of getting the version. Hopefully, we don't change how we format the release body.
-          LATEST_NIGHTLY_VERSION="$(gh api "repos/dsp-testing/codeql-cli-nightlies/releases" --jq '.[] | select(.draft == false) | .body '| head -n 1 | awk '{print $4}')"
+          LATEST_NIGHTLY_VERSION="$(gh api "repos/dsp-testing/codeql-cli-nightlies/releases" --jq '.[] | select(.draft == false) | .body '| sed '1!d' | awk '{print $4}')"
           echo "Download nightly version $LATEST_NIGHTLY_VERSION and tag $LATEST_NIGHTLY_TAG"
 
           gh codeql set-channel nightly
