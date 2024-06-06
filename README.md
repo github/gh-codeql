@@ -4,7 +4,11 @@ This CLI extension exposes the [CodeQL CLI](https://codeql.github.com/docs/codeq
 
 ## Installation
 
-Once you have installed the GitHub CLI (version 2.0 or higher), run `gh extensions install github/gh-codeql`.
+Once you have installed the GitHub CLI (version 2.0 or higher), run:
+
+```bash
+gh extensions install github/gh-codeql
+```
 
 ## Usage
 
