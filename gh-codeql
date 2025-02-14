@@ -220,15 +220,24 @@ function install_stub() {
     fi
 
     if [ -w "$bindir" ]; then
+        if ["$platform" == "win64"]; then
+          cat << "_codeql_stub" > "$bindir/codeql.cmd"
+@echo off
 
-        cat << "_codeql_stub" > "$bindir/codeql"
+gh codeql %*
+_codeql_stub
+
+            chmod +x "$bindir/codeql.cmd"
+       else
+            cat << "_codeql_stub" > "$bindir/codeql"
 #!/usr/bin/env bash
 
 set -e
 exec -a codeql gh codeql "$@"
 _codeql_stub
 
-        chmod +x "$bindir/codeql"
+            chmod +x "$bindir/codeql"
+        fi
     else
         error "Missing write permission on $bindir. Please provide a directory with write permissions to install a stub."
     fi
@@ -238,7 +247,7 @@ _codeql_stub
 if [ "$1" = "download" ]; then
     download "$2"
     exit 0
-fi    
+fi
 
 # Handle the set-version command.
 if [ "$1" = "set-version" ]; then
