@@ -32,8 +32,7 @@ version="$(gh config get extensions.codeql.version 2> /dev/null)" || :
 
 if [ "$1" = "local-version" ] ; then
     if [ "$2" = "on" ] ; then
-        warning "Local version support is disabled by default to remove the opportunity from untrusted git repositories to
-abuse older CodeQL CLIs. To disable local version support again run the command 'gh codeql local-version off'."
+        Advertencia: "La compatibilidad con versiones locales está deshabilitada de forma predeterminada para evitar que repositorios git no confiables abusen de las CLI de CodeQL antiguas. Para deshabilitar nuevamente la compatibilidad con versiones locales, ejecute el comando 'gh codeql local-version off'."
         gh config set extensions.codeql.local-version true 2> /dev/null
     elif [ "$2" = "off" ] ; then
         gh config set extensions.codeql.local-version false 2> /dev/null
