@@ -3,7 +3,7 @@ set -e
 
 # --- Verifica que los comandos requeridos estén instalados ---
 for cmd in gh curl unzip; do
-    command -v $cmd >/dev/null 2>&1 || { echo "ERROR: '$cmd' not found. Please install it before running this script."; exit 1; }
+    command -v " $cmd " >/dev/null 2>&1 || { echo "ERROR: '$cmd' no encontrado. Instálelo antes de ejecutar este script."; exit 1; }
 done
 
 # --- Verifica permisos de escritura en el directorio raíz de la extensión ---
