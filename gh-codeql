@@ -1,296 +1,296 @@
 #!/usr/bin/env bash
-set -e
+set -Eeuo pipefail
+# Safer word-splitting: do NOT split on spaces; only on newline/tab.
+IFS=$'\n\t'
 
-# --- Verifica que los comandos requeridos estén instalados ---
+# -------- logging & exits --------
+log()  { printf '%s\n' "$*"; }
+warn() { printf 'WARNING: %s\n' "$*" >&2; }
+die()  { local code="${1:-1}"; shift || true; printf 'ERROR: %s\n' "$*" >&2; exit "$code"; }
+
+# -------- debug flag --------
+debug="$(gh config get extensions.codeql.debug 2>/dev/null || true)"
+if [[ "${debug:-}" == "true" ]]; then set -x; fi
+
+# -------- resolve script root --------
+# Robust when invoked via gh extension wrapper or symlink.
+script_path="${BASH_SOURCE[0]:-$0}"
+rootdir="$(cd -- "$(dirname -- "$script_path")" && pwd -P)"
+
+# -------- dependency checks --------
 for cmd in gh curl unzip; do
-    command -v " $cmd " >/dev/null 2>&1 || { echo "ERROR: '$cmd' no encontrado. Instálelo antes de ejecutar este script."; exit 1; }
+  command -v "$cmd" >/dev/null 2>&1 || die 127 "Missing dependency '$cmd'. Please install it and try again."
 done
 
-# --- Verifica permisos de escritura en el directorio raíz de la extensión ---
-rootdir="$(dirname "$0")"
-if [ ! -w "$rootdir" ]; then
-    echo "ERROR: No write permission in '$rootdir'. Please run the script with sufficient permissions."
-    exit 1
+# -------- write permission guard --------
+tmp="$rootdir/.gh-codeql.$$"
+if ! (umask 077 && : >"$tmp") 2>/dev/null; then
+  die 13 "No write permission in '$rootdir'. Run with sufficient permissions or choose a writable location."
 fi
+rm -f "$tmp" || true
 
-debug="$(gh config get extensions.codeql.debug 2> /dev/null)" || :
-if [ "$debug" = "true" ] ; then
-    set -x
-fi
+# -------- config --------
+channel="$(gh config get extensions.codeql.channel 2>/dev/null || true)"
+version="$(gh config get extensions.codeql.version 2>/dev/null || true)"
+local_version="$(gh config get extensions.codeql.local-version 2>/dev/null || true)"
 
-error() {
-    echo "ERROR: $*" 1>&2
-    exit 1
-}
-
-warning() {
-    echo "WARNING: $*" 1>&2
-}
-
-channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || :
-version="$(gh config get extensions.codeql.version 2> /dev/null)" || :
-
-if [ "$1" = "local-version" ] ; then
-    if [ "$2" = "on" ] ; then
-        Advertencia: "La compatibilidad con versiones locales está deshabilitada de forma predeterminada para evitar que repositorios git no confiables abusen de las CLI de CodeQL antiguas. Para deshabilitar nuevamente la compatibilidad con versiones locales, ejecute el comando 'gh codeql local-version off'."
-        gh config set extensions.codeql.local-version true 2> /dev/null
-    elif [ "$2" = "off" ] ; then
-        gh config set extensions.codeql.local-version false 2> /dev/null
-    else
-        error "Invalid local-version command: '$2'. Supported values are 'on' or 'off'."
-    fi
-    exit 0
-fi
-
-local_version="$(gh config get extensions.codeql.local-version 2> /dev/null)" || :
-
-if [ -e .codeql-version ]; then
-    if [ "$local_version" = "true" ]; then
-        version=$(<.codeql-version)
-    else
-        warning "Ignoring local version because local version support is off. Call the command 'gh codeql local-version on' to enable local version support. "
-    fi
-fi
-
-version=${GH_CODEQL_VERSION:-$version}
-
-if [ -z "$1" ]; then
-    cat <<EOF
+usage() {
+  cat <<EOF
 GitHub command-line wrapper for the CodeQL CLI.
 
 Usage:
     gh codeql set-channel [release|nightly]     # default: release
     gh codeql set-version [version]             # default: latest
     gh codeql local-version [on|off]            # enable/disable local version support
-    gh codeql set-local-version [version]       # set the version for the current working directory, default: latest
+    gh codeql set-local-version [version]       # pin version in current working directory (default: latest)
     gh codeql unset-local-version               # switch back to the global version
-    gh codeql list-versions                     # list all available versions for current channel
+    gh codeql list-versions                     # list available versions for current channel
     gh codeql list-installed                    # list installed versions for current channel
     gh codeql cleanup <version>                 # delete a specific downloaded version
     gh codeql cleanup-all                       # delete all installed versions for all channels
     gh codeql download [version]                # download a specific version (default: latest)
-    gh codeql debug [on|off]                    # enable/disable debug output for gh extension
-    gh codeql install-stub [dir]                # install an executable script named 'codeql' that invokes 'gh codeql' with the passed arguments (default: /usr/local/bin/)
+    gh codeql debug [on|off]                    # enable/disable debug output for the extension
+    gh codeql install-stub [dir]                # install 'codeql' stub that invokes 'gh codeql' (default: /usr/local/bin/)
     gh codeql <anything else>                   # pass arguments to CodeQL CLI
 
 Current channel: ${channel:-not specified}.
 Current version: ${version:-not specified}.
 EOF
-    exit 0
+}
+
+# -------- top-level flags / help --------
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then
+  usage
+  exit 0
 fi
 
-if [ -z "$channel" ] || [ "$channel" = "release" ] ; then
-    channel="release"
-    repo=github/codeql-cli-binaries
-elif [ "$channel" = "nightly" ] ; then
-    repo=dsp-testing/codeql-cli-nightlies
+if [[ "${1:-}" == "debug" ]]; then
+  case "${2:-}" in
+    on)  gh config set extensions.codeql.debug true  2>/dev/null ;;
+    off) gh config set extensions.codeql.debug false 2>/dev/null ;;
+    *)   die 2 "Invalid debug command: '${2:-}'. Use 'on' or 'off'." ;;
+  esac
+  exit 0
+fi
+
+# -------- channel / repo --------
+if [[ -z "${channel:-}" || "$channel" == "release" ]]; then
+  channel="release"
+  repo="github/codeql-cli-binaries"
+elif [[ "$channel" == "nightly" ]]; then
+  repo="dsp-testing/codeql-cli-nightlies"
 else
-    error "Channel must be 'release' or 'nightly'."
+  die 2 "Channel must be 'release' or 'nightly'."
 fi
 
-platform="$(gh config get extensions.codeql.platform 2> /dev/null)" || :
-if [[ -z "$platform" ]] ; then
-    if [[ "$OSTYPE" == "darwin"* ]] ; then
-        platform=osx64
-    elif [[ "$OSTYPE" == "linux"* ]] ; then
-        platform=linux64
-    elif [[ "$OSTYPE" == "win"* ]] || [[ $OSTYPE == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] ; then
-        platform=win64
-    else
-        error "Couldn't determine platform from OSTYPE='$OSTYPE'. Consider setting extensions.codeql.platform."
-    fi
+# -------- platform detection --------
+platform="$(gh config get extensions.codeql.platform 2>/dev/null || true)"
+if [[ -z "${platform:-}" ]]; then
+  case "${OSTYPE:-}" in
+    darwin*)                platform="osx64"  ;;
+    linux*)                 platform="linux64";;
+    cygwin*|msys*|win*)     platform="win64"  ;;
+    *) die 2 "Couldn't determine platform from OSTYPE='${OSTYPE:-}'. Set 'extensions.codeql.platform'." ;;
+  esac
 fi
 
-if [ "$1" = "debug" ] ; then
-    if [ "$2" = "on" ] ; then
-        gh config set extensions.codeql.debug true 2> /dev/null
-    elif [ "$2" = "off" ] ; then
-        gh config set extensions.codeql.debug false 2> /dev/null
-    else
-        error "Invalid debug command: '$2'."
-    fi
-    exit 0
+# -------- local-version toggle --------
+if [[ "${1:-}" == "local-version" ]]; then
+  case "${2:-}" in
+    on)
+      warn "Local version support enables reading '.codeql-version'. Use only in trusted repositories."
+      gh config set extensions.codeql.local-version true 2>/dev/null
+      ;;
+    off)
+      gh config set extensions.codeql.local-version false 2>/dev/null
+      ;;
+    *)
+      die 2 "Invalid local-version command: '${2:-}'. Use 'on' or 'off'."
+      ;;
+  esac
+  exit 0
 fi
 
-if [ "$1" = "list-versions" ]; then
-    gh api "repos/$repo/releases" --paginate --jq ".[].tag_name"
-    exit 0
+# Honor .codeql-version only if local-version is enabled
+if [[ -e ".codeql-version" ]]; then
+  if [[ "${local_version:-}" == "true" ]]; then
+    version="$(< .codeql-version)"
+  else
+    warn "Ignoring .codeql-version because local version support is disabled. Enable with: gh codeql local-version on"
+  fi
 fi
 
-if [ "$1" = "set-channel" ]; then
-    if [ "$2" != "release" ] && [ "$2" != "nightly" ]; then
-        error "Invalid channel: '$2'."
-    fi
-    old_channel="$(gh config get extensions.codeql.channel 2> /dev/null)" || :
-    if [ "${old_channel:-release}" != "$2" ] ; then
-        gh config set extensions.codeql.channel "$2" 2> /dev/null
-        gh config set extensions.codeql.version "" 2> /dev/null
-        echo "Switched to $2 channel. Any pinned version has been unset."
-    else
-        echo "Channel already set to $2."
-    fi
-    exit 0
-fi
+# Allow env override
+version="${GH_CODEQL_VERSION:-${version:-}}"
 
-function get_latest() {
-    if [ "$channel" = "release" ]; then
-        gh api "repos/$repo/releases" --paginate --jq ".[] | select(.draft == false and .prerelease == false) | .tag_name" | sort -V | tail -1
-    else
-        gh api "repos/$repo/releases" --jq ".[] | select(.draft == false) | .tag_name" | head -1
-    fi
+# -------- helpers --------
+get_latest() {
+  if [[ "$channel" == "release" ]]; then
+    gh api "repos/$repo/releases" --paginate \
+      --jq '.[] | select(.draft==false and .prerelease==false) | .tag_name' | sort -V | tail -1
+  else
+    gh api "repos/$repo/releases" --jq '.[] | select(.draft==false) | .tag_name' | head -1
+  fi
 }
 
-function download() {
-    local version="$1"
-    if [ -z "$version" ] || [ "$version" = "latest" ]; then
-        version="$(get_latest)"
-    fi
-    if [ -x "$rootdir/dist/$channel/$version/codeql" ] ; then
-        return 0
-    fi
-    id=$(gh api "repos/$repo/releases" --paginate --jq ".[] | select(.tag_name == \"$version\") | .id" | head -n1)
-    if [ -z "$id" ]; then
-        error "Version '$1' not found."
-    fi
-    mkdir -p "$rootdir/dist/$channel"
-    tempdir="$(mktemp -d "$rootdir/dist/$channel/temp_$version.XXXXXXXX")"
-    trap 'rm -rf "$tempdir"' EXIT
-    echo "Downloading CodeQL CLI version $version..."
-    curl -L -o "$tempdir/codeql-$platform.zip" "https://github.com/$repo/releases/download/$version/codeql-$platform.zip"
-    echo "Unpacking CodeQL CLI version $version..."
-    unzip -oq "$tempdir/codeql-$platform.zip" -d "$tempdir"
-    mv "$tempdir/codeql" "$rootdir/dist/$channel/$version"
-    rm -rf "$tempdir"
+validate_version() {
+  local want="${1:-}"
+  local out=""
+  if [[ -z "$want" || "$want" == "latest" ]]; then
+    out="$(get_latest)"
+  else
+    local repoName="${repo#*/}"
+    local repoOwner="${repo%/*}"
+    out="$(gh api graphql -f query='
+      query($owner:String!, $name:String!, $tag:String!) {
+        repository(owner:$owner, name:$name) {
+          asEntered: release(tagName:$tag) { tagName }
+          vPrefixed: release(tagName:$tag) { tagName }
+        }
+      }' -F owner="$repoOwner" -F name="$repoName" -F tag="$want" \
+      --jq "[.data.repository.asEntered.tagName, .data.repository.vPrefixed.tagName] | map(select(. != null)) | .[0]")"
+  fi
+  [[ -n "$out" ]] || die 2 "Unknown version: '${want:-latest}'."
+  printf '%s\n' "$out"
 }
 
-function validate_version() {
-    local version="$1"
-    if [ -z "$version" ]; then
-        error "Version must be specified. Use 'latest' to automatically determine the latest version."
-    elif [ "$version" = "latest" ]; then
-        version="$(get_latest)"
-    else
-        repoName=${repo#*/}
-        repoOwner=${repo%/*}
-        version="$(gh api graphql -f query='{
-            repository(owner: "'"$repoOwner"'", name: "'"$repoName"'") {
-                asEntered: release(tagName: "'"$version"'") {
-                    tagName
-                }
-                vPrefixed: release(tagName: "v'"$version"'") {
-                    tagName
-                }
-            }
-        }' --jq '[.data.repository.[] | values][0].tagName')"
-        if [ -z "$version" ] ; then
-            error "Unknown version: '$1'."
-        fi
-    fi
-    echo "$version"
+download() {
+  local ver="${1:-}"
+  if [[ -z "$ver" || "$ver" == "latest" ]]; then
+    ver="$(get_latest)"
+  fi
+  if [[ -x "$rootdir/dist/$channel/$ver/codeql" ]]; then
+    return 0
+  fi
+
+  local id
+  id="$(gh api 'repos/'"$repo"'/releases' --paginate --jq ".[] | select(.tag_name == \"$ver\") | .id" | head -n1)"
+  [[ -n "$id" ]] || die 2 "Version '$ver' not found."
+
+  mkdir -p "$rootdir/dist/$channel"
+  local tempdir
+  tempdir="$(mktemp -d "$rootdir/dist/$channel/.dl_${ver}.XXXXXXXX")"
+  trap 'rm -rf "$tempdir"' EXIT
+
+  log "Downloading CodeQL CLI version $ver..."
+  curl -fsSL -o "$tempdir/codeql-$platform.zip" \
+    "https://github.com/$repo/releases/download/$ver/codeql-$platform.zip"
+
+  log "Unpacking CodeQL CLI version $ver..."
+  unzip -oq "$tempdir/codeql-$platform.zip" -d "$tempdir"
+  mv "$tempdir/codeql" "$rootdir/dist/$channel/$ver"
+
+  rm -rf "$tempdir"
+  trap - EXIT
 }
 
-function set_version() {
-    local version=$(validate_version "$1")
-    if [ -z "$version" ]; then
-        exit 1
-    fi
-    download "$version"
-    gh config set extensions.codeql.version "$version" 2> /dev/null
+set_version() {
+  local ver; ver="$(validate_version "${1:-latest}")"
+  download "$ver"
+  gh config set extensions.codeql.version "$ver" 2>/dev/null
 }
 
-function set_local_version() {
-    local version=$(validate_version "$1")
-    download "$version"
-    echo "$version" > .codeql-version
+set_local_version() {
+  local ver; ver="$(validate_version "${1:-latest}")"
+  download "$ver"
+  printf '%s\n' "$ver" > .codeql-version
 }
 
-function install_stub() {
-    local bindir="$1"
-    if [ -z "$bindir" ]; then
-        bindir="/usr/local/bin"
-    fi
+install_stub() {
+  local bindir="${1:-/usr/local/bin}"
+  [[ -e "$bindir" ]] || die 2 "Directory '$bindir' does not exist."
+  local t="$bindir/.codeql.$$"
+  (umask 077 && : >"$t") 2>/dev/null || die 13 "Missing write permission on '$bindir'."
+  rm -f "$t" || true
 
-    if [ ! -e "$bindir" ]; then
-        error "The directory $bindir doesn't exist, please provide a different directory like 'gh codeql install-stub [dir]' to install a stub."
-    fi
-
-    if [ -w "$bindir" ]; then
-
-        cat << "_codeql_stub" > "$bindir/codeql"
+  cat <<'STUB' > "$bindir/codeql"
 #!/usr/bin/env bash
-
 set -e
 exec -a codeql gh codeql "$@"
-_codeql_stub
-
-        chmod +x "$bindir/codeql"
-    else
-        error "Missing write permission on $bindir. Please provide a directory with write permissions to install a stub."
-    fi
+STUB
+  chmod +x "$bindir/codeql"
+  log "Stub installed to: $bindir/codeql"
 }
 
-if [ "$1" = "download" ]; then
-    download "$2"
+# -------- subcommands --------
+case "${1:-}" in
+  list-versions)
+    gh api "repos/$repo/releases" --paginate --jq '.[].tag_name'
     exit 0
-fi    
+    ;;
 
-if [ "$1" = "set-version" ]; then
-    set_version "$2"
-    version="$(gh config get extensions.codeql.version 2> /dev/null)" || :
-    exec "$rootdir/dist/$channel/$version/codeql" version
-fi
-
-if [ "$1" = "set-local-version" ]; then
-    if [ "$local_version" = "true" ]; then
-        set_local_version "$2"
-        version="$(<.codeql-version)" || :
-        exec "$rootdir/dist/$channel/$version/codeql" version
+  set-channel)
+    [[ "${2:-}" == "release" || "${2:-}" == "nightly" ]] || die 2 "Invalid channel: '${2:-}'."
+    old_channel="$(gh config get extensions.codeql.channel 2>/dev/null || echo release)"
+    if [[ "$old_channel" != "$2" ]]; then
+      gh config set extensions.codeql.channel "$2" 2>/dev/null
+      gh config set extensions.codeql.version "" 2>/dev/null
+      log "Switched to $2 channel. Any pinned version has been unset."
     else
-        error "$(cat << _message
-Local version support is disabled by default to remove the opportunity from untrusted git repositories to
-abuse older CodeQL CLIs. Enable local version support with the command 'gh codeql local-version on'.
-_message
+      log "Channel already set to $2."
+    fi
+    exit 0
+    ;;
+
+  download)
+    download "${2:-latest}"
+    exit 0
+    ;;
+
+  set-version)
+    set_version "${2:-latest}"
+    version="$(gh config get extensions.codeql.version 2>/dev/null || true)"
+    exec "$rootdir/dist/$channel/$version/codeql" version
+    ;;
+
+  set-local-version)
+    if [[ "${local_version:-}" == "true" ]]; then
+      set_local_version "${2:-latest}"
+      version="$(< .codeql-version)"
+      exec "$rootdir/dist/$channel/$version/codeql" version
+    else
+      die 2 "$(cat <<'MSG'
+Local version support is disabled by default to prevent untrusted git repositories from forcing older CodeQL CLIs.
+Enable it explicitly with: gh codeql local-version on
+MSG
 )"
     fi
-fi
+    ;;
 
-if [ "$1" = "unset-local-version" ]; then
-    if [ -e .codeql-version ]; then
-        rm -f .codeql-version
-    else
-        warning "No local version specified."
+  unset-local-version)
+    if [[ -e .codeql-version ]]; then rm -f .codeql-version; else warn "No local version specified."; fi
+    exit 0
+    ;;
+
+  list-installed)
+    if [[ -d "$rootdir/dist/$channel" ]]; then
+      (cd "$rootdir/dist/$channel" && find . -mindepth 1 -maxdepth 1 -type d -printf '%P\n') || true
     fi
     exit 0
-fi
+    ;;
 
-if [ "$1" = "list-installed" ]; then
-    ( cd "$rootdir/dist/$channel" ; find . -mindepth 1 -maxdepth 1 -type d | cut -c3- ; )
-    exit 0
-fi
-
-if [ "$1" = "cleanup" ]; then
-    if [ -z "$2" ]; then
-        error "Version must be specified."
-    elif [ ! -d "$rootdir/dist/$channel/$2" ]; then
-        error "Version '$2' not found."
-    fi
+  cleanup)
+    [[ -n "${2:-}" ]] || die 2 "Version must be specified."
+    [[ -d "$rootdir/dist/$channel/$2" ]] || die 2 "Version '$2' not found."
     rm -rf "$rootdir/dist/$channel/$2"
     exit 0
-fi
+    ;;
 
-if [ "$1" = "cleanup-all" ]; then
+  cleanup-all)
     rm -rf "$rootdir/dist"
     exit 0
-fi
+    ;;
 
-if [ "$1" = "install-stub" ]; then
-    install_stub "$2"
+  install-stub)
+    install_stub "${2:-/usr/local/bin}"
     exit 0
-fi
+    ;;
+esac
 
-if [ -z "$version" ]; then
-    set_version latest
-    version="$(gh config get extensions.codeql.version 2> /dev/null)" || :
+# -------- default path --------
+if [[ -z "${version:-}" ]]; then
+  set_version latest
+  version="$(gh config get extensions.codeql.version 2>/dev/null || true)"
 fi
 download "$version"
 export CODEQL_DIST="$rootdir/dist/$channel/$version"
